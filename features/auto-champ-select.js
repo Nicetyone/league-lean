@@ -68,49 +68,49 @@ export function start({ socket } = {}) {
     const champId = me?.championId || me?.championPickIntent || 0;
     const position = me?.assignedPosition || "";
 
-    // ---- Auto-apply runes + items ----
-    if ((settings.autoApplyRunes || settings.autoApplyItems) && champId) {
+    // ---- Auto-apply runes + spells + items (one bundle, one apply) ----
+    if ((settings.autoApplyRunes || settings.autoApplyItems || settings.autoApplySpells) && champId) {
       const pageKind = settings.autoApplyRunePage === "win" ? "win" : "pick";
-      const key = `${champId}|${position}|${pageKind}|r${!!settings.autoApplyRunes}|i${!!settings.autoApplyItems}`;
+      const key = `${champId}|${position}|${pageKind}` +
+        `|r${!!settings.autoApplyRunes}|i${!!settings.autoApplyItems}|s${!!settings.autoApplySpells}` +
+        `|f${settings.flashSide || "D"}`;
       if (key !== appliedKey) {
         if (applyTimer) clearTimeout(applyTimer);
         applyTimer = setTimeout(async () => {
           const tier = settings.metaTier || "platinum_plus";
           const source = settings.metaSource || "lolalytics";
+          const flashSide = settings.flashSide || "D";
 
-          // Run rune + build fetch in parallel.
-          const tasks = [];
-          if (settings.autoApplyRunes) {
-            tasks.push((async () => {
-              try {
-                const result = await meta.fetchRunes({ championId: champId, position, tier, source });
-                const labelMap = { pick: "Most played", win: "Highest winrate" };
-                const wantedLabel = labelMap[pageKind];
-                const page = result.pages.find((p) => p.label === wantedLabel) || result.pages[0];
-                if (!page) { log("no rune page — skipping"); return; }
-                await meta.applyRunePage(page, { label: page.label });
-                log(`applied ${page.label} runes for champion ${champId} ${position}`);
-                try { globalThis.Toast?.success?.(`league-lean: ${page.label} runes applied`); } catch {}
-              } catch (e) { log("rune apply failed", e?.message); }
-            })());
+          try {
+            const champions = await meta.getChampionMap();
+            const champ = champions.get(champId);
+            const bundle = await meta.fetchChampionBundle({
+              championId: champId, position, tier, source,
+            });
+            const labelMap = { pick: "Most played", win: "Highest winrate" };
+            // After dedupe there may be only one page; take whichever matches
+            // the user's preference, or the only available.
+            const wantedLabel = labelMap[pageKind];
+            const page = bundle.pages.find((p) => p.label === wantedLabel)
+              || bundle.pages.find((p) => p.label.includes(wantedLabel))
+              || bundle.pages[0];
+            if (!page) { log("no rune page — skipping"); appliedKey = key; return; }
+
+            await meta.applyComplete(page, {
+              championId: champId,
+              championName: champ?.name,
+              position,
+              flashSide,
+              alsoSpells: !!settings.autoApplySpells,
+              alsoItems:  !!settings.autoApplyItems,
+            });
+            log(`auto-applied ${page.label} for ${champ?.name ?? champId} ${position}`);
+            try {
+              globalThis.Toast?.success?.(`league-lean: ${page.label} applied`);
+            } catch {}
+          } catch (e) {
+            log("auto-apply failed", e?.message ?? e);
           }
-          if (settings.autoApplyItems) {
-            tasks.push((async () => {
-              try {
-                const champions = await meta.getChampionMap();
-                const ch = champions.get(champId);
-                const build = await meta.fetchItemBuild({ championId: champId, position, tier });
-                await meta.applyItemSet(build, {
-                  championId: champId,
-                  championName: ch?.name,
-                  position,
-                });
-                log(`applied item set for champion ${champId} ${position}`);
-                try { globalThis.Toast?.success?.("league-lean: build applied"); } catch {}
-              } catch (e) { log("item apply failed", e?.message); }
-            })());
-          }
-          await Promise.allSettled(tasks);
           appliedKey = key;
         }, APPLY_DEBOUNCE_MS);
       }

@@ -237,6 +237,64 @@ const CSS = `
 #${SHELL_ID} .ll-rune-perk-missing {
   font-size: 8px; color: var(--ll-accent, #c8aa6e); opacity: 0.6;
 }
+#${SHELL_ID} .ll-card-section {
+  margin: 6px 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--ll-border, rgba(200,170,110,0.15));
+}
+#${SHELL_ID} .ll-spells {
+  display: flex; gap: 8px; align-items: center;
+}
+#${SHELL_ID} .ll-spell {
+  position: relative;
+}
+#${SHELL_ID} .ll-spell img {
+  width: 26px; height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--ll-border, rgba(200,170,110,0.3));
+  background: rgba(0,0,0,0.4);
+}
+#${SHELL_ID} .ll-spell-key {
+  position: absolute; bottom: -4px; right: -4px;
+  background: rgba(10,18,26,0.95);
+  color: var(--ll-accent-hot, #f0e6d2);
+  font-size: 9px; font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 2px;
+  border: 1px solid var(--ll-accent, #c8aa6e);
+}
+#${SHELL_ID} .ll-build-seq {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 3px;
+}
+#${SHELL_ID} .ll-build-item {
+  width: 24px; height: 24px;
+  border-radius: 3px;
+  border: 1px solid var(--ll-border, rgba(200,170,110,0.25));
+  background: rgba(0,0,0,0.4);
+}
+#${SHELL_ID} .ll-arrow {
+  color: var(--ll-accent, #c8aa6e); opacity: 0.5;
+  font-size: 12px;
+}
+#${SHELL_ID} .ll-skill {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px;
+}
+#${SHELL_ID} .ll-skill-label {
+  opacity: 0.7;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: 9.5px;
+}
+#${SHELL_ID} .ll-skill-key {
+  display: inline-block;
+  width: 18px; height: 18px;
+  text-align: center; line-height: 18px;
+  font-weight: 700; font-size: 11px;
+  color: var(--ll-accent-hot, #f0e6d2);
+  background: rgba(200,170,110,0.15);
+  border: 1px solid var(--ll-accent, #c8aa6e);
+  border-radius: 3px;
+}
 #${SHELL_ID} .ll-apply {
   width: 100%;
   margin-top: 6px;
@@ -655,7 +713,8 @@ const championTab = (() => {
     lastFetchKey = fetchKey;
 
     const [runesR, countersR] = await Promise.allSettled([
-      meta.fetchRunes({ championId: champion.id, position, tier, source }),
+      meta.fetchChampionBundle({ championId: champion.id, position, tier, source })
+        .then((b) => ({ ...b, championId: champion.id, championName: champion.name, position })),
       meta.fetchCounters({ championId: champion.id, position, tier }),
     ]);
 
@@ -689,43 +748,7 @@ const championTab = (() => {
       host.innerHTML = `<div class="ll-empty">no rune pages</div>`;
       return;
     }
-    host.innerHTML = payload.pages.map((page, i) => {
-      const perks = page.selectedPerkIds || [];
-      const runes = perks.slice(0, 6);
-      const shards = perks.slice(6);
-      const styleIco = icons.styleIconUrl(page.primaryStyleId);
-      return `
-        <div class="ll-rune-card" data-page-idx="${i}">
-          <div class="ll-rune-card-head">
-            <div class="ll-rune-card-title">
-              ${styleIco ? `<img src="${styleIco}" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">` : ""}
-              ${page.label}
-            </div>
-            <div class="ll-rune-card-meta">
-              ${page.wr != null ? `${(+page.wr).toFixed(2)}% WR` : ""}
-              ${page.n != null ? ` · ${(+page.n).toLocaleString()} games` : ""}
-            </div>
-          </div>
-          <div class="ll-rune-perks">
-            ${runes.map((id) => {
-              const url = icons.perkIconUrl(id);
-              return url
-                ? `<img class="ll-rune-perk" title="perk ${id}" src="${url}" alt="${id}">`
-                : `<div class="ll-rune-perk ll-rune-perk-missing" title="perk ${id} (no icon)">${id}</div>`;
-            }).join("")}
-          </div>
-          <div class="ll-rune-perks">
-            ${shards.map((id) => {
-              const url = icons.shardIconUrl(id);
-              return url
-                ? `<img class="ll-rune-perk ll-shard" title="shard ${id}" src="${url}" alt="${id}">`
-                : `<div class="ll-rune-perk ll-shard ll-rune-perk-missing" title="shard ${id}">${id}</div>`;
-            }).join("")}
-          </div>
-          <button class="ll-apply" data-apply-idx="${i}">Apply this page</button>
-        </div>
-      `;
-    }).join("");
+    host.innerHTML = payload.pages.map((page, i) => renderPageCard(page, i)).join("");
 
     host.addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-apply-idx]");
@@ -734,21 +757,116 @@ const championTab = (() => {
       const page = payload.pages[idx];
       if (!page) return;
       btn.disabled = true;
+      const orig = btn.textContent;
       btn.textContent = "applying…";
       try {
-        await meta.applyRunePage(page, { label: page.label });
+        const settings = store.load();
+        await meta.applyComplete(page, {
+          championId: payload.championId,
+          championName: payload.championName,
+          position: payload.position,
+          flashSide: settings.flashSide || "D",
+          alsoSpells: true,
+          alsoItems: true,
+        });
         btn.textContent = "applied ✓";
-        try { globalThis.Toast?.success?.("league-lean: runes applied"); } catch {}
+        try { globalThis.Toast?.success?.("league-lean: page + spells + build applied"); } catch {}
       } catch (err) {
         btn.textContent = `failed: ${err?.message ?? err}`;
         log("apply failed", err);
       } finally {
         setTimeout(() => {
           btn.disabled = false;
-          btn.textContent = "Apply this page";
-        }, 1500);
+          btn.textContent = orig;
+        }, 1800);
       }
     }, { once: false });
+  }
+
+  function renderPageCard(page, i) {
+    const perks  = page.selectedPerkIds || [];
+    const runes  = perks.slice(0, 6);
+    const shards = perks.slice(6);
+    const styleIco = icons.styleIconUrl(page.primaryStyleId);
+
+    // Summoner spells — arrange Flash on user's preferred slot.
+    const settings = store.load();
+    const flashSide = settings.flashSide || "D";
+    const arranged  = page.spells?.length >= 2
+      ? meta.arrangeSpells(page.spells, flashSide)
+      : null;
+    const spellsHtml = arranged ? `
+      <div class="ll-card-section ll-spells">
+        ${[arranged.spell1Id, arranged.spell2Id].map((id, idx) => `
+          <div class="ll-spell">
+            <img src="${icons.summonerSpellIconUrl(id)}" alt="${id}" title="spell ${id}">
+            <span class="ll-spell-key">${idx === 0 ? flashSide : (flashSide === "D" ? "F" : "D")}</span>
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
+
+    // Build sequence: starters → boots → core → completed → late
+    const b = page.build || {};
+    const buildSeq = [
+      ...((b.starters || []).slice(0, 2)),
+      ...(b.boots || []),
+      ...(b.core || []),
+      ...(b.completed || []),
+      ...(b.lateGame || []),
+    ];
+    const dedupedSeq = [...new Set(buildSeq)];
+    const buildHtml = dedupedSeq.length ? `
+      <div class="ll-card-section ll-build-seq">
+        ${dedupedSeq.map((id, idx) => `
+          ${idx > 0 ? `<span class="ll-arrow">›</span>` : ""}
+          <img class="ll-build-item" src="${icons.itemIconUrl(id)}" title="item ${id}" alt="${id}">
+        `).join("")}
+      </div>
+    ` : "";
+
+    // Skill order — short string like "QEW" gives priority order.
+    const skillHtml = page.skillOrder ? `
+      <div class="ll-card-section ll-skill">
+        <span class="ll-skill-label">Skill priority</span>
+        ${page.skillOrder.split("").map((s) => `<span class="ll-skill-key">${s}</span>`).join("")}
+      </div>
+    ` : "";
+
+    return `
+      <div class="ll-rune-card" data-page-idx="${i}">
+        <div class="ll-rune-card-head">
+          <div class="ll-rune-card-title">
+            ${styleIco ? `<img src="${styleIco}" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">` : ""}
+            ${page.label}
+          </div>
+          <div class="ll-rune-card-meta">
+            ${page.wr != null ? `${(+page.wr).toFixed(2)}% WR` : ""}
+            ${page.n != null ? ` · ${(+page.n).toLocaleString()} games` : ""}
+          </div>
+        </div>
+        <div class="ll-rune-perks">
+          ${runes.map((id) => {
+            const url = icons.perkIconUrl(id);
+            return url
+              ? `<img class="ll-rune-perk" title="perk ${id}" src="${url}" alt="${id}">`
+              : `<div class="ll-rune-perk ll-rune-perk-missing" title="perk ${id} (no icon)">${id}</div>`;
+          }).join("")}
+        </div>
+        <div class="ll-rune-perks">
+          ${shards.map((id) => {
+            const url = icons.shardIconUrl(id);
+            return url
+              ? `<img class="ll-rune-perk ll-shard" title="shard ${id}" src="${url}" alt="${id}">`
+              : `<div class="ll-rune-perk ll-shard ll-rune-perk-missing" title="shard ${id}">${id}</div>`;
+          }).join("")}
+        </div>
+        ${spellsHtml}
+        ${buildHtml}
+        ${skillHtml}
+        <button class="ll-apply" data-apply-idx="${i}">Apply runes + spells + build</button>
+      </div>
+    `;
   }
 
   async function paintCounters(container, counters) {
@@ -973,6 +1091,7 @@ const settingsTab = (() => {
     { key: "autoLockIn",      label: "Auto lock-in champion" },
     { key: "autoApplyRunes",  label: "Auto-apply runes on pick" },
     { key: "autoApplyItems",  label: "Auto-apply build (item set)" },
+    { key: "autoApplySpells", label: "Auto-apply summoner spells" },
     { key: "postGameOpgg",    label: "Post-game op.gg buttons" },
     { key: "homeCleanup",     label: "Home cleanup" },
     { key: "performanceMode", label: "Performance mode" },
@@ -983,6 +1102,13 @@ const settingsTab = (() => {
       options: [
         ["pick", "Most played"],
         ["win",  "Highest winrate"],
+      ],
+    },
+    {
+      key: "flashSide", label: "Flash key",
+      options: [
+        ["D", "D (left slot)"],
+        ["F", "F (right slot)"],
       ],
     },
     {
