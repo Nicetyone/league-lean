@@ -1,0 +1,10 @@
+{
+  "name": "league-lean",
+  "version": "0.1.0",
+  "description": "Pengu Loader plugin — strips Riot's League client UI and adds meta/automation features",
+  "author": "Nicety",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}

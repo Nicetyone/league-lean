@@ -1,0 +1,34 @@
+/* Global tokens + post-game op.gg button styling.
+   Other features ship their own scoped CSS. */
+
+:root {
+  --ll-accent: #c8aa6e;        /* hextech gold */
+  --ll-accent-hot: #f0e6d2;
+  --ll-bg: rgba(10, 18, 26, 0.92);
+  --ll-border: rgba(200, 170, 110, 0.4);
+  --ll-radius: 2px;
+}
+
+button.league-lean-opgg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--ll-bg);
+  color: var(--ll-accent);
+  border: 1px solid var(--ll-border);
+  border-radius: var(--ll-radius);
+  cursor: pointer;
+  transition: color 80ms, border-color 80ms;
+}
+
+button.league-lean-opgg-btn:hover {
+  color: var(--ll-accent-hot);
+  border-color: var(--ll-accent);
+}
