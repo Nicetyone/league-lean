@@ -869,12 +869,12 @@ const championTab = (() => {
       </div>
     ` : "";
 
-    // Build sequence: starters → boots → 5-item core
+    // Build sequence: starters → ordered core (first → boots → 2nd → … → 5th).
+    // coreBuild already has boots embedded in their typical slot.
     const b = page.build || {};
     const buildSeq = [
       ...((b.starters  || []).slice(0, 2)),
-      ...((b.boots     || []).slice(0, 1)),
-      ...((b.coreBuild || []).slice(0, 5)),
+      ...((b.coreBuild || []).slice(0, 6)),
     ];
     const dedupedSeq = [...new Set(buildSeq)];
     const buildHtml = dedupedSeq.length ? `
