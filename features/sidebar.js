@@ -869,14 +869,12 @@ const championTab = (() => {
       </div>
     ` : "";
 
-    // Build sequence: starters → boots → core → completed → late
+    // Build sequence: starters → boots → 5-item core
     const b = page.build || {};
     const buildSeq = [
-      ...((b.starters || []).slice(0, 2)),
-      ...(b.boots || []),
-      ...(b.core || []),
-      ...(b.completed || []),
-      ...(b.lateGame || []),
+      ...((b.starters  || []).slice(0, 2)),
+      ...((b.boots     || []).slice(0, 1)),
+      ...((b.coreBuild || []).slice(0, 5)),
     ];
     const dedupedSeq = [...new Set(buildSeq)];
     const buildHtml = dedupedSeq.length ? `
@@ -1571,7 +1569,11 @@ export function start({ socket, onSettingChange } = {}) {
       for (const el of tabBar.querySelectorAll(".ll-tab")) {
         el.classList.toggle("ll-active", el.dataset.tab === activeTab);
       }
-      if (isOpen) renderActive();
+      // Force the sidebar open on lock-in so the user sees their build
+      // immediately. setOpen() is a no-op if already open + correctly sets
+      // the toggle button position relative to the (possibly resized) shell.
+      if (!isOpen) setOpen(true);
+      else renderActive();
     } else if (changed && isOpen && activeTab === "champion") {
       renderActive();
     }
