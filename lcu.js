@@ -41,6 +41,20 @@ export async function put(path, body) {
   return res.status === 204 ? null : res.json().catch(() => null);
 }
 
+export async function patch(path, body) {
+  const res = await fetch(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: body == null ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok && res.status !== 204) {
+    let detail = "";
+    try { detail = (await res.text()).slice(0, 240); } catch {}
+    throw new Error(`PATCH ${path} → ${res.status}${detail ? `: ${detail}` : ""}`);
+  }
+  return res.status === 204 ? null : res.json().catch(() => null);
+}
+
 export async function del(path) {
   const res = await fetch(path, { method: "DELETE" });
   if (!res.ok && res.status !== 204) throw new Error(`DELETE ${path} → ${res.status}`);
