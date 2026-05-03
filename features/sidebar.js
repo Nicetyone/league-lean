@@ -29,6 +29,8 @@ const TAB_ICONS = {
   settings: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   toggle_open: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`,
   toggle_close: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  pop_out: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
+  pop_in: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H3v-6"/><path d="M14 10L3 21"/><path d="M21 5v11a2 2 0 0 1-2 2h-7"/></svg>`,
 };
 
 const TABS = [
@@ -95,6 +97,44 @@ const CSS = `
   box-shadow: -4px 0 14px rgba(0,0,0,0.4);
 }
 #${SHELL_ID}.ll-open { transform: translateX(0); }
+
+/* Popped-out mode — shell fills the entire detached window. */
+#${SHELL_ID}.ll-popup-host {
+  position: relative !important;
+  top: auto !important; right: auto !important; bottom: auto !important;
+  width: 100vw !important; height: 100vh !important;
+  transform: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  z-index: 0 !important;
+}
+#${SHELL_ID} .ll-popout-btn {
+  background: transparent; border: 0;
+  color: var(--ll-accent, #c8aa6e);
+  cursor: pointer;
+  padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-left: 1px solid var(--ll-border, rgba(200,170,110,0.3));
+}
+#${SHELL_ID} .ll-popout-btn:hover { color: var(--ll-accent-hot, #f0e6d2); }
+/* Resize grip in the popped-out window's bottom-right corner. */
+#${SHELL_ID} .ll-popup-resizer {
+  display: none;
+  position: fixed;
+  right: 0; bottom: 0;
+  width: 18px; height: 18px;
+  cursor: nwse-resize;
+  z-index: 99;
+  background:
+    linear-gradient(135deg, transparent 55%,
+      var(--ll-accent, #c8aa6e) 55%, var(--ll-accent, #c8aa6e) 70%,
+      transparent 70%, transparent 80%,
+      var(--ll-accent, #c8aa6e) 80%, var(--ll-accent, #c8aa6e) 95%,
+      transparent 95%);
+  opacity: 0.55;
+}
+#${SHELL_ID}.ll-popup-host .ll-popup-resizer { display: block; }
+#${SHELL_ID} .ll-popup-resizer:hover { opacity: 1; }
 
 #${SHELL_ID} .ll-tabs {
   display: flex;
@@ -1088,8 +1128,10 @@ export function start({ socket, onSettingChange } = {}) {
           ${TAB_ICONS[t.key] || ""}<span>${t.label}</span>
         </button>
       `).join("")}
+      <button class="ll-popout-btn" data-action="pop-out" title="Open in a separate window">${TAB_ICONS.pop_out}</button>
     </div>
     <div class="ll-content"></div>
+    <div class="ll-popup-resizer" title="Drag to resize"></div>
   `;
 
   const toggleBtn = document.createElement("div");
@@ -1100,6 +1142,113 @@ export function start({ socket, onSettingChange } = {}) {
   document.documentElement.appendChild(shell);
   document.documentElement.appendChild(toggleBtn);
   icons.preload(); // warm the perks.json cache
+
+  // ---- pop-out window mode -----
+  // Pengu's CEF lets us spawn a detached OS-level window via window.open.
+  // We adopt the shell DOM into the popup's document (preserving event
+  // listeners and state) so all the running JS in the main window keeps
+  // driving it. Closing the popup snaps the shell back into the in-client.
+  let popupRef = null;
+  let popupSize = { w: 420, h: 920 };
+
+  function popOut() {
+    if (popupRef && !popupRef.closed) { try { popupRef.focus(); } catch {} return; }
+    let popup;
+    try {
+      popup = window.open("about:blank", "leagueLeanPopup",
+        `width=${popupSize.w},height=${popupSize.h},left=80,top=80,resizable=yes`);
+    } catch (e) { log("popup open threw", e); return; }
+    if (!popup) { log("popup blocked"); return; }
+    popupRef = popup;
+
+    try {
+      const invoke = (name, params = []) => popup.riotInvoke?.({
+        request: JSON.stringify({ name, params }),
+      });
+      invoke("Window.ResizeTo", [popupSize.w, popupSize.h]);
+      invoke("Window.CenterToScreen");
+      invoke("Window.Show");
+    } catch {}
+
+    popup.document.open();
+    popup.document.write(
+      `<!DOCTYPE html><html><head><meta charset="utf-8">` +
+      `<title>league-lean</title><style>${CSS}</style></head>` +
+      `<body style="margin:0;padding:0;background:rgba(10,18,26,0.97);color:#f0e6d2;"></body></html>`
+    );
+    popup.document.close();
+
+    try {
+      const adopted = popup.document.adoptNode(shell);
+      shell.classList.add("ll-popup-host", "ll-open");
+      popup.document.body.appendChild(adopted);
+    } catch (e) {
+      log("adoptNode failed", e); popup.close(); popupRef = null; return;
+    }
+
+    toggleBtn.style.display = "none";
+    setPopOutBtn(true);
+    attachPopupResizeHandlers(popup);
+
+    popup.addEventListener("beforeunload", () => popIn());
+    log("popped out");
+  }
+
+  function popIn() {
+    if (!popupRef) return;
+    try {
+      const adopted = document.adoptNode(shell);
+      document.documentElement.appendChild(adopted);
+    } catch (e) { log("adopt back failed", e); }
+    shell.classList.remove("ll-popup-host");
+    toggleBtn.style.display = "";
+    setPopOutBtn(false);
+    try { if (popupRef && !popupRef.closed) popupRef.close(); } catch {}
+    popupRef = null;
+    log("popped in");
+  }
+
+  function setPopOutBtn(poppedOut) {
+    const btn = shell.querySelector(".ll-popout-btn");
+    if (!btn) return;
+    btn.innerHTML = poppedOut ? TAB_ICONS.pop_in : TAB_ICONS.pop_out;
+    btn.dataset.action = poppedOut ? "pop-in" : "pop-out";
+    btn.title = poppedOut ? "Return to in-client sidebar" : "Open in a separate window";
+  }
+
+  // ----- Resizable popup -----
+  // CEF popups inherit borderless window chrome, so OS-level resize handles
+  // aren't there. We add a corner grip in the bottom-right that drives
+  // riotInvoke('Window.ResizeTo') as the cursor moves. screenX/screenY
+  // give us screen-space coords that survive the window being moved around.
+  function attachPopupResizeHandlers(popup) {
+    const grip = popup.document.querySelector(".ll-popup-resizer");
+    if (!grip) return;
+    let dragging = false, sX = 0, sY = 0, sW = 0, sH = 0;
+    const invokeResize = (w, h) => {
+      try {
+        popup.riotInvoke?.({ request: JSON.stringify({
+          name: "Window.ResizeTo", params: [Math.round(w), Math.round(h)],
+        })});
+      } catch {}
+    };
+    grip.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      sX = e.screenX; sY = e.screenY;
+      sW = popupSize.w; sH = popupSize.h;
+      e.preventDefault(); e.stopPropagation();
+    });
+    popup.document.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      const w = Math.max(320, sW + (e.screenX - sX));
+      const h = Math.max(400, sH + (e.screenY - sY));
+      popupSize = { w, h };
+      invokeResize(w, h);
+    });
+    popup.document.addEventListener("mouseup", () => { dragging = false; });
+    popup.addEventListener("blur",  () => { dragging = false; });
+  }
 
   const tabBar = shell.querySelector(".ll-tabs");
   const content = shell.querySelector(".ll-content");
@@ -1115,11 +1264,15 @@ export function start({ socket, onSettingChange } = {}) {
   toggleBtn.addEventListener("click", () => setOpen(!isOpen));
 
   tabBar.addEventListener("click", (e) => {
+    const action = e.target.closest("[data-action]");
+    if (action) {
+      if (action.dataset.action === "pop-out") popOut();
+      else if (action.dataset.action === "pop-in") popIn();
+      return;
+    }
     const t = e.target.closest("[data-tab]");
     if (!t || t.disabled) return;
     activeTab = t.dataset.tab;
-    // Clicking the Champion tab always returns to my locked-in pick — drop
-    // any browse override the user set by clicking a row in Meta.
     if (activeTab === "champion") browseSelection = null;
     for (const el of tabBar.querySelectorAll(".ll-tab")) {
       el.classList.toggle("ll-active", el.dataset.tab === activeTab);
@@ -1264,8 +1417,10 @@ export function start({ socket, onSettingChange } = {}) {
     }
   }, 5000);
 
-  // Reattach on Riot view-router wipes.
+  // Reattach on Riot view-router wipes. While popped out, the shell lives in
+  // the popup's document — don't fight that.
   const reattachObserver = new MutationObserver(() => {
+    if (popupRef && !popupRef.closed) return;
     if (!document.contains(shell)) {
       document.documentElement.appendChild(shell);
     }
@@ -1281,6 +1436,8 @@ export function start({ socket, onSettingChange } = {}) {
     unsub?.();
     clearInterval(exitPoller);
     reattachObserver.disconnect();
+    if (popupRef && !popupRef.closed) { try { popupRef.close(); } catch {} }
+    popupRef = null;
     shell.remove();
     toggleBtn.remove();
   };
