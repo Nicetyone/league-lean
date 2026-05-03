@@ -237,6 +237,34 @@ const CSS = `
 #${SHELL_ID} .ll-rune-perk-missing {
   font-size: 8px; color: var(--ll-accent, #c8aa6e); opacity: 0.6;
 }
+#${SHELL_ID} .ll-rune-toggle {
+  display: flex;
+  margin-bottom: 6px;
+  border: 1px solid var(--ll-border, rgba(200,170,110,0.35));
+  border-radius: 2px;
+  overflow: hidden;
+}
+#${SHELL_ID} .ll-rune-toggle-btn {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--ll-border, rgba(200,170,110,0.2));
+  color: var(--ll-accent, #c8aa6e);
+  cursor: pointer;
+  padding: 5px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+#${SHELL_ID} .ll-rune-toggle-btn:last-child { border-right: 0; }
+#${SHELL_ID} .ll-rune-toggle-btn:hover { opacity: 1; }
+#${SHELL_ID} .ll-rune-toggle-btn.ll-active {
+  background: rgba(200,170,110,0.18);
+  color: var(--ll-accent-hot, #f0e6d2);
+  opacity: 1;
+}
 #${SHELL_ID} .ll-card-section {
   margin: 6px 0;
   padding-top: 6px;
@@ -748,9 +776,44 @@ const championTab = (() => {
       host.innerHTML = `<div class="ll-empty">no rune pages</div>`;
       return;
     }
-    host.innerHTML = payload.pages.map((page, i) => renderPageCard(page, i)).join("");
+
+    // Map labels → indices so we can pick the user's preferred page first.
+    const labelOf = (p) => String(p.label || "").toLowerCase();
+    const idxFor = (kind) => {
+      const want = kind === "win" ? "highest winrate" : "most played";
+      const direct = payload.pages.findIndex((p) => labelOf(p).startsWith(want));
+      return direct >= 0 ? direct : 0;
+    };
+
+    function paintActive() {
+      const settings = store.load();
+      const preferred = settings.autoApplyRunePage === "win" ? "win" : "pick";
+      const activeIdx = payload.pages.length === 1 ? 0 : idxFor(preferred);
+
+      const tabsHtml = payload.pages.length <= 1 ? "" : `
+        <div class="ll-rune-toggle">
+          ${payload.pages.map((p, i) => {
+            // Map page label → setting value, used to persist toggle clicks.
+            const kind = labelOf(p).startsWith("highest") ? "win" : "pick";
+            const short = kind === "win" ? "Highest winrate" : "Most played";
+            return `<button class="ll-rune-toggle-btn ${i === activeIdx ? "ll-active" : ""}" data-toggle-kind="${kind}">${short}</button>`;
+          }).join("")}
+        </div>
+      `;
+
+      host.innerHTML = tabsHtml + renderPageCard(payload.pages[activeIdx], activeIdx);
+    }
+
+    paintActive();
 
     host.addEventListener("click", async (e) => {
+      const tab = e.target.closest("[data-toggle-kind]");
+      if (tab) {
+        const kind = tab.dataset.toggleKind;
+        store.save({ autoApplyRunePage: kind });
+        paintActive();
+        return;
+      }
       const btn = e.target.closest("[data-apply-idx]");
       if (!btn) return;
       const idx = parseInt(btn.dataset.applyIdx, 10);
