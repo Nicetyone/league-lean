@@ -572,6 +572,27 @@ const CSS = `
   margin: 4px 0;
 }
 #${SHELL_ID} .ll-action-btn:hover { background: rgba(200,170,110,0.15); }
+#${SHELL_ID} .ll-danger-btn {
+  color: #ff8a4c;
+  border-color: rgba(255,138,76,0.5);
+}
+#${SHELL_ID} .ll-danger-btn:hover {
+  background: rgba(255,138,76,0.12);
+  color: #ffb38a;
+  border-color: #ff8a4c;
+}
+#${SHELL_ID} .ll-action-detail {
+  font-size: 10px; opacity: 0.6;
+  margin: 4px 2px 0;
+  line-height: 1.4;
+}
+#${SHELL_ID} .ll-action-status {
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--ll-accent, #c8aa6e);
+  margin-top: 4px;
+  min-height: 13px;
+}
 #${SHELL_ID} .ll-version-row {
   display: flex; justify-content: space-between;
   font-size: 11px;
@@ -1224,6 +1245,9 @@ const settingsTab = (() => {
         <hr/>
         <div class="ll-settings-actions">
           <button class="ll-action-btn" data-action="match-history">Open match history</button>
+          <button class="ll-action-btn ll-danger-btn" data-action="clear-item-sets">Clear ALL item sets</button>
+          <div class="ll-action-detail">Wipes every custom item set for your summoner — both league-lean's and your own hand-made ones. Use when the in-game shop is cluttered.</div>
+          <div class="ll-action-status ll-clear-status"></div>
         </div>
         <hr/>
         <div class="ll-version">
@@ -1262,6 +1286,23 @@ const settingsTab = (() => {
       if (!btn) return;
       if (btn.dataset.action === "match-history") {
         await postGame.openMatchHistory();
+      }
+      if (btn.dataset.action === "clear-item-sets") {
+        const status = container.querySelector(".ll-clear-status");
+        if (!confirm("This will delete EVERY custom item set for your summoner — including ones you made yourself. Continue?")) return;
+        if (status) status.textContent = "clearing…";
+        btn.disabled = true;
+        try {
+          const removed = await meta.clearAllItemSets();
+          if (status) status.textContent = removed
+            ? `cleared ${removed} item set${removed === 1 ? "" : "s"}`
+            : "no item sets to clear";
+        } catch (e) {
+          if (status) status.textContent = `failed: ${e?.message ?? e}`;
+        } finally {
+          btn.disabled = false;
+          setTimeout(() => { if (status) status.textContent = ""; }, 4000);
+        }
       }
       if (btn.dataset.action === "check-update") {
         const latestEl = container.querySelector(".ll-version-latest");
