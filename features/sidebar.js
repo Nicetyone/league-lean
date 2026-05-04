@@ -323,6 +323,67 @@ const CSS = `
   border: 1px solid var(--ll-accent, #c8aa6e);
   border-radius: 3px;
 }
+#${SHELL_ID} .ll-build-browser summary {
+  cursor: pointer;
+  font-size: 10.5px; opacity: 0.75;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 0;
+}
+#${SHELL_ID} .ll-build-browser summary:hover { opacity: 1; }
+#${SHELL_ID} .ll-build-browser[open] summary { margin-bottom: 6px; }
+#${SHELL_ID} .ll-build-list {
+  display: flex; flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+#${SHELL_ID} .ll-build-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px; align-items: center;
+  padding: 4px 6px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--ll-border, rgba(200,170,110,0.18));
+  border-radius: 2px;
+}
+#${SHELL_ID} .ll-build-row:hover { border-color: var(--ll-accent, #c8aa6e); }
+#${SHELL_ID} .ll-build-row-items {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 1px;
+}
+#${SHELL_ID} .ll-build-row-items .ll-build-item {
+  width: 20px; height: 20px;
+  border-radius: 2px;
+}
+#${SHELL_ID} .ll-build-row-items .ll-arrow {
+  font-size: 10px; opacity: 0.4;
+}
+#${SHELL_ID} .ll-build-row-stats {
+  display: flex; flex-direction: column;
+  font-size: 9.5px; line-height: 1.2;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+#${SHELL_ID} .ll-build-row-wr  { color: var(--ll-accent-hot, #f0e6d2); font-weight: 700; }
+#${SHELL_ID} .ll-build-row-n   { opacity: 0.55; }
+#${SHELL_ID} .ll-build-row-apply {
+  background: transparent;
+  color: var(--ll-accent, #c8aa6e);
+  border: 1px solid var(--ll-border, rgba(200,170,110,0.4));
+  border-radius: 2px;
+  padding: 2px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+#${SHELL_ID} .ll-build-row-apply:hover {
+  color: var(--ll-accent-hot, #f0e6d2);
+  border-color: var(--ll-accent, #c8aa6e);
+}
+#${SHELL_ID} .ll-build-row-apply:disabled { opacity: 0.5; cursor: not-allowed; }
 #${SHELL_ID} .ll-apply {
   width: 100%;
   margin-top: 6px;
@@ -835,6 +896,37 @@ const championTab = (() => {
         paintActive();
         return;
       }
+
+      // "Browse all builds" → Apply on a specific alt build row.
+      const altBtn = e.target.closest("[data-build-apply]");
+      if (altBtn) {
+        const idx = parseInt(altBtn.dataset.buildApply, 10);
+        const activePage = payload.pages[
+          payload.pages.length === 1 ? 0
+            : (store.load().autoApplyRunePage === "win" ? 1 : 0)
+        ] || payload.pages[0];
+        const alt = (activePage?.build?.allBuilds || [])[idx];
+        if (!alt) return;
+        altBtn.disabled = true;
+        const orig = altBtn.textContent;
+        altBtn.textContent = "applying…";
+        try {
+          await meta.applyAltBuild(alt.items, activePage.build, {
+            championId: payload.championId,
+            championName: payload.championName,
+            position: payload.position,
+          });
+          altBtn.textContent = "applied ✓";
+          try { globalThis.Toast?.success?.("league-lean: build applied"); } catch {}
+        } catch (err) {
+          altBtn.textContent = `failed: ${err?.message ?? err}`;
+          log("alt-build apply failed", err);
+        } finally {
+          setTimeout(() => { altBtn.disabled = false; altBtn.textContent = orig; }, 1500);
+        }
+        return;
+      }
+
       const btn = e.target.closest("[data-apply-idx]");
       if (!btn) return;
       const idx = parseInt(btn.dataset.applyIdx, 10);
@@ -915,6 +1007,32 @@ const championTab = (() => {
       </div>
     ` : "";
 
+    // Browse-all-builds dropdown. Each row is a 5-item path with WR/games and
+    // an Apply button that swaps the in-game item set to that build.
+    const all = Array.isArray(b.allBuilds) ? b.allBuilds : [];
+    const browseHtml = all.length ? `
+      <details class="ll-card-section ll-build-browser">
+        <summary>Browse all builds (${all.length})</summary>
+        <div class="ll-build-list">
+          ${all.map((bld, idx) => `
+            <div class="ll-build-row" data-build-idx="${idx}">
+              <div class="ll-build-row-items">
+                ${bld.items.map((id, i) => `
+                  ${i > 0 ? `<span class="ll-arrow">›</span>` : ""}
+                  <img class="ll-build-item" src="${icons.itemIconUrl(id)}" title="item ${id}" alt="${id}">
+                `).join("")}
+              </div>
+              <div class="ll-build-row-stats">
+                <span class="ll-build-row-wr">${(+bld.wr).toFixed(1)}%</span>
+                <span class="ll-build-row-n">${(+bld.picks).toLocaleString()}g</span>
+              </div>
+              <button class="ll-build-row-apply" data-build-apply="${idx}">Apply</button>
+            </div>
+          `).join("")}
+        </div>
+      </details>
+    ` : "";
+
     return `
       <div class="ll-rune-card" data-page-idx="${i}">
         <div class="ll-rune-card-head">
@@ -946,6 +1064,7 @@ const championTab = (() => {
         ${spellsHtml}
         ${buildHtml}
         ${skillHtml}
+        ${browseHtml}
         <button class="ll-apply" data-apply-idx="${i}">Apply runes + spells + build</button>
       </div>
     `;
