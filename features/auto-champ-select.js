@@ -1,16 +1,24 @@
-// Auto champ-select actions — driven by the /lol-champ-select/v1/session
-// subscription. Two independent automations:
+// Auto champ-select actions — driven by /lol-champ-select/v1/session.
 //
-//   1. autoLockIn:        when your pick action is in progress AND you've
-//                         hovered/selected a champion, POST .../complete to
-//                         lock in for you. Uses a small debounce so a fat-
-//                         finger tap doesn't lock instantly.
-//   2. autoApplyRunes:    when your championId/position pair stabilises, fetch
-//                         meta runes and apply the chosen page (most-played
-//                         or highest-WR per settings.autoApplyRunePage).
+// Two trigger models, picked by the autoLockIn toggle:
 //
-// Both feature toggles are read live via store.load() on every event, so
-// flipping them in the settings tab takes effect without reload.
+// MODE A — autoLockIn ON:
+//   We chain apply + lock-in into one ordered flow. When the user has hovered
+//   a champion stably for APPLY_DEBOUNCE_MS:
+//     1. fetch the meta bundle
+//     2. apply runes + spells + items   (still pre-lock; spells PATCH succeeds)
+//     3. POST .../complete to lock in   (LOCK_IN_DELAY_MS after apply finishes)
+//   This way spells land before my-selection becomes immutable, and the user's
+//   "pick" doesn't trigger anything visible until lock-in fires.
+//
+// MODE B — autoLockIn OFF:
+//   We *only* apply once the pick action has already completed (user clicked
+//   Lock In manually). Hovering a champion does nothing — matches the
+//   user's mental model of "lock means commit". Caveat: spell PATCH will
+//   fail post-lock; runes + items still apply cleanly.
+//
+// Toggles are read live from store.load() on every event so flipping
+// autoLockIn / autoApply* in the settings tab takes effect without reload.
 
 import * as lcu from "../lcu.js";
 import * as meta from "../lib/meta.js";
@@ -18,8 +26,8 @@ import * as store from "../lib/store.js";
 
 const log = (...a) => console.log("[league-lean][auto-cs]", ...a);
 
-const LOCK_IN_DELAY_MS = 600;     // grace period before forcing lock-in
-const APPLY_DEBOUNCE_MS = 1200;   // wait for the user to stop changing pick
+const LOCK_IN_AFTER_APPLY_MS = 250; // small grace between apply and lock-in
+const APPLY_DEBOUNCE_MS      = 1200;
 
 function findMyPickAction(session) {
   const cellId = session?.localPlayerCellId;
@@ -27,7 +35,7 @@ function findMyPickAction(session) {
   for (const phase of session.actions) {
     if (!Array.isArray(phase)) continue;
     for (const action of phase) {
-      if (action?.actorCellId === cellId && action?.type === "pick" && !action?.completed) {
+      if (action?.actorCellId === cellId && action?.type === "pick") {
         return action;
       }
     }
@@ -48,54 +56,44 @@ export function start({ socket } = {}) {
   }
   log("active");
 
-  let lockInTimer = null;
   let applyTimer = null;
-  let appliedKey = null;     // `${championId}|${position}|${pageKind}` last applied
-  let lockedActionIds = new Set(); // avoid double-completing the same action
+  let appliedKey = null;     // identity of the bundle we last applied
+  let inFlight = false;      // serialise the apply+lock chain
 
-  const onSession = async (session) => {
-    if (!session) {
-      // Champ-select ended — reset memory.
-      appliedKey = null;
-      lockedActionIds.clear();
-      if (lockInTimer) { clearTimeout(lockInTimer); lockInTimer = null; }
-      if (applyTimer)  { clearTimeout(applyTimer);  applyTimer  = null; }
-      return;
-    }
+  const reset = () => {
+    appliedKey = null;
+    inFlight = false;
+    if (applyTimer) { clearTimeout(applyTimer); applyTimer = null; }
+  };
 
+  async function doApplyAndMaybeLock(session) {
+    if (inFlight) return;
+    inFlight = true;
     const settings = store.load();
+    const cellId = session?.localPlayerCellId;
     const me = findMyTeammate(session);
-    const champId = me?.championId || me?.championPickIntent || 0;
+    const champId  = me?.championId || 0;
     const position = me?.assignedPosition || "";
+    const action  = findMyPickAction(session);
 
-    // ---- Auto-apply runes + spells + items (one bundle, one apply) ----
-    if ((settings.autoApplyRunes || settings.autoApplyItems || settings.autoApplySpells) && champId) {
-      const pageKind = settings.autoApplyRunePage === "win" ? "win" : "pick";
-      const key = `${champId}|${position}|${pageKind}` +
-        `|r${!!settings.autoApplyRunes}|i${!!settings.autoApplyItems}|s${!!settings.autoApplySpells}` +
-        `|f${settings.flashSide || "D"}`;
-      if (key !== appliedKey) {
-        if (applyTimer) clearTimeout(applyTimer);
-        applyTimer = setTimeout(async () => {
-          const tier = settings.metaTier || "platinum_plus";
-          const source = settings.metaSource || "lolalytics";
-          const flashSide = settings.flashSide || "D";
-
-          try {
-            const champions = await meta.getChampionMap();
-            const champ = champions.get(champId);
-            const bundle = await meta.fetchChampionBundle({
-              championId: champId, position, tier, source,
-            });
-            const labelMap = { pick: "Most played", win: "Highest winrate" };
-            // After dedupe there may be only one page; take whichever matches
-            // the user's preference, or the only available.
-            const wantedLabel = labelMap[pageKind];
-            const page = bundle.pages.find((p) => p.label === wantedLabel)
-              || bundle.pages.find((p) => p.label.includes(wantedLabel))
-              || bundle.pages[0];
-            if (!page) { log("no rune page — skipping"); appliedKey = key; return; }
-
+    try {
+      // 1. Apply runes + spells + items (skip if all three are off).
+      const wantApply = settings.autoApplyRunes || settings.autoApplyItems || settings.autoApplySpells;
+      if (wantApply && champId) {
+        const tier = settings.metaTier || "platinum_plus";
+        const source = settings.metaSource || "lolalytics";
+        const flashSide = settings.flashSide || "D";
+        const pageKind = settings.autoApplyRunePage === "win" ? "win" : "pick";
+        try {
+          const champions = await meta.getChampionMap();
+          const champ = champions.get(champId);
+          const bundle = await meta.fetchChampionBundle({ championId: champId, position, tier, source });
+          const labelMap = { pick: "Most played", win: "Highest winrate" };
+          const wantedLabel = labelMap[pageKind];
+          const page = bundle.pages.find((p) => p.label === wantedLabel)
+            || bundle.pages.find((p) => p.label.includes(wantedLabel))
+            || bundle.pages[0];
+          if (page) {
             await meta.applyComplete(page, {
               championId: champId,
               championName: champ?.name,
@@ -105,37 +103,58 @@ export function start({ socket } = {}) {
               alsoItems:  !!settings.autoApplyItems,
             });
             log(`auto-applied ${page.label} for ${champ?.name ?? champId} ${position}`);
-            try {
-              globalThis.Toast?.success?.(`league-lean: ${page.label} applied`);
-            } catch {}
-          } catch (e) {
-            log("auto-apply failed", e?.message ?? e);
+            try { globalThis.Toast?.success?.(`league-lean: ${page.label} applied`); } catch {}
           }
-          appliedKey = key;
-        }, APPLY_DEBOUNCE_MS);
+        } catch (e) {
+          log("auto-apply failed", e?.message ?? e);
+        }
       }
-    }
 
-    // ---- Auto lock-in ----
-    if (settings.autoLockIn) {
-      const action = findMyPickAction(session);
-      if (action && action.isInProgress && action.championId && !lockedActionIds.has(action.id)) {
-        if (lockInTimer) clearTimeout(lockInTimer);
-        lockInTimer = setTimeout(async () => {
-          try {
-            await lcu.post(`/lol-champ-select/v1/session/actions/${action.id}/complete`);
-            lockedActionIds.add(action.id);
-            log("auto locked-in action", action.id, "championId=", action.championId);
-            try { globalThis.Toast?.success?.("league-lean: locked in"); } catch {}
-          } catch (e) {
-            log("lock-in failed", e?.message);
-          }
-        }, LOCK_IN_DELAY_MS);
-      } else if (action && !action.isInProgress && lockInTimer) {
-        // Action turned not-in-progress before timer fired — cancel.
-        clearTimeout(lockInTimer);
-        lockInTimer = null;
+      // 2. Auto lock-in (only if action is still in-progress + uncompleted).
+      if (settings.autoLockIn && action && action.isInProgress && !action.completed && action.championId) {
+        // small grace so apply settles before the cell goes immutable
+        await new Promise((r) => setTimeout(r, LOCK_IN_AFTER_APPLY_MS));
+        try {
+          await lcu.post(`/lol-champ-select/v1/session/actions/${action.id}/complete`);
+          log("auto-locked-in", action.id);
+          try { globalThis.Toast?.success?.("league-lean: locked in"); } catch {}
+        } catch (e) {
+          log("lock-in failed", e?.message);
+        }
       }
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  const onSession = async (session) => {
+    if (!session) { reset(); return; }
+    const settings = store.load();
+    const me = findMyTeammate(session);
+    const champId = me?.championId || 0;
+    const position = me?.assignedPosition || "";
+    const action  = findMyPickAction(session);
+    if (!champId) return;
+
+    if (settings.autoLockIn) {
+      // MODE A: debounce on stable championId, then run apply → lock chain.
+      const key = `A|${champId}|${position}|${settings.autoApplyRunePage}|f${settings.flashSide || "D"}`;
+      if (key === appliedKey) return;
+      // Don't fire if action already completed by something else (manual lock).
+      if (action?.completed) return;
+      if (applyTimer) clearTimeout(applyTimer);
+      applyTimer = setTimeout(async () => {
+        appliedKey = key;
+        await doApplyAndMaybeLock(session);
+      }, APPLY_DEBOUNCE_MS);
+    } else {
+      // MODE B: only apply once the pick action has been completed (user
+      // manually locked in). One-shot per championId+position.
+      if (!action?.completed) return;
+      const key = `B|${champId}|${position}|${settings.autoApplyRunePage}|f${settings.flashSide || "D"}`;
+      if (key === appliedKey) return;
+      appliedKey = key;
+      await doApplyAndMaybeLock(session);
     }
   };
 
@@ -154,7 +173,6 @@ export function start({ socket } = {}) {
 
   return () => {
     unsub?.();
-    if (lockInTimer) clearTimeout(lockInTimer);
-    if (applyTimer)  clearTimeout(applyTimer);
+    reset();
   };
 }

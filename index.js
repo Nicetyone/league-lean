@@ -10,6 +10,7 @@ import * as registry from "./lib/registry.js";
 import * as postGameOpgg from "./features/post-game-opgg.js";
 import * as autoAccept from "./features/auto-accept.js";
 import * as autoChampSelect from "./features/auto-champ-select.js";
+import * as autoHonor from "./features/auto-honor.js";
 import * as homeCleanup from "./features/home-cleanup.js";
 import * as performanceMode from "./features/performance-mode.js";
 import * as sidebar from "./features/sidebar.js";
@@ -36,11 +37,12 @@ export async function load() {
   // subscription drives both. We bind it to a synthetic "autoChampSelect" key
   // and treat it as enabled if either underlying toggle is on.
   registry.register("autoChampSelect", () => autoChampSelect.start({ socket: pluginCtx?.socket }));
+  registry.register("autoHonor",       () => autoHonor.start());
 
   const settings = store.load();
   log("settings:", settings);
 
-  for (const key of ["homeCleanup", "performanceMode", "autoAccept", "postGameOpgg"]) {
+  for (const key of ["homeCleanup", "performanceMode", "autoAccept", "postGameOpgg", "autoHonor"]) {
     await registry.applyFeature(key, !!settings[key]);
   }
   await registry.applyFeature("autoChampSelect", !!(settings.autoLockIn || settings.autoApplyRunes));
