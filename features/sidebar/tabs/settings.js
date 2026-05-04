@@ -37,13 +37,6 @@ const SELECTS = [
     ],
   },
   {
-    key: "metaSource", label: "Meta source",
-    options: [
-      ["lolalytics", "Lolalytics"],
-      ["ugg",        "U.GG"],
-    ],
-  },
-  {
     key: "metaTier", label: "Meta tier",
     options: [
       ["all",            "All ranks"],
@@ -85,6 +78,10 @@ export function render(container, onChange) {
           </select>
         </label>
       `).join("")}
+      <div class="ll-source-row">
+        <span>Source</span>
+        <span class="ll-source-value">Lolalytics → U.GG <span class="ll-source-detail">(auto-fallback)</span></span>
+      </div>
       <hr/>
       <div class="ll-settings-actions">
         <button class="ll-action-btn" data-action="match-history">Open match history</button>

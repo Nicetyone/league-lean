@@ -570,6 +570,18 @@ export const CSS = `
   border: 0; border-top: 1px solid rgba(200,170,110,0.2);
   margin: 10px 0;
 }
+#${SHELL_ID} .ll-source-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; gap: 12px; font-size: 11px;
+}
+#${SHELL_ID} .ll-source-value {
+  color: var(--ll-accent-hot, #f0e6d2);
+  font-weight: 600;
+}
+#${SHELL_ID} .ll-source-detail {
+  color: var(--ll-accent, #c8aa6e); opacity: 0.65;
+  font-weight: 400; margin-left: 4px;
+}
 #${SHELL_ID} .ll-action-btn {
   width: 100%;
   background: transparent;
