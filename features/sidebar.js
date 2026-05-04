@@ -1174,7 +1174,7 @@ const settingsTab = (() => {
     { key: "autoApplyRunes",  label: "Auto-apply runes on pick" },
     { key: "autoApplyItems",  label: "Auto-apply build (item set)" },
     { key: "autoApplySpells", label: "Auto-apply summoner spells" },
-    { key: "autoHonor",       label: "Auto-honor random teammate" },
+    { key: "autoHonor",       label: "Auto-honor top-gold teammate" },
     { key: "postGameOpgg",    label: "Post-game op.gg buttons" },
     { key: "homeCleanup",     label: "Home cleanup" },
     { key: "performanceMode", label: "Performance mode" },
