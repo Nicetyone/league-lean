@@ -81,13 +81,13 @@ export function start({ socket } = {}) {
       const wantApply = settings.autoApplyRunes || settings.autoApplyItems || settings.autoApplySpells;
       if (wantApply && champId) {
         const tier = settings.metaTier || "platinum_plus";
-        const source = settings.metaSource || "lolalytics";
         const flashSide = settings.flashSide || "D";
         const pageKind = settings.autoApplyRunePage === "win" ? "win" : "pick";
         try {
           const champions = await meta.getChampionMap();
           const champ = champions.get(champId);
-          const bundle = await meta.fetchChampionBundle({ championId: champId, position, tier, source });
+          // Builds provider is read from settings inside fetchChampionBundle.
+          const bundle = await meta.fetchChampionBundle({ championId: champId, position, tier });
           const labelMap = { pick: "Most played", win: "Highest winrate" };
           const wantedLabel = labelMap[pageKind];
           const page = bundle.pages.find((p) => p.label === wantedLabel)

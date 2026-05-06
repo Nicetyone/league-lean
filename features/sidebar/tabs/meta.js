@@ -91,7 +91,9 @@ export async function render(container, { onChampionClick } = {}) {
   const settings = store.load();
   const tier = settings.metaTier || "platinum_plus";
   const host = container.querySelector(".ll-tier-host");
-  const fetchKey = `${activeLane}|${tier}`;
+  // metaSource feeds the cache key so swapping providers triggers a re-fetch.
+  const metaSource = settings.metaSource || "lolalytics";
+  const fetchKey = `${activeLane}|${tier}|${metaSource}`;
 
   let payload = cachedKey === fetchKey ? cachedPayload : null;
   if (!payload) {

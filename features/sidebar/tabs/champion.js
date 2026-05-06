@@ -29,8 +29,11 @@ export async function render(container, { champion, position, isBrowse, hasChamp
   }
   const settings = store.load();
   const tier = settings.metaTier || "platinum_plus";
-  const source = settings.metaSource || "lolalytics";
-  const fetchKey = `${champion.id}|${position}|${tier}|${source}`;
+  // The actual provider is selected inside fetchChampionBundle from
+  // settings.buildsSource; we include it in the fetchKey so flipping the
+  // dropdown invalidates the cache and re-fetches.
+  const buildsSource = settings.buildsSource || "lolalytics";
+  const fetchKey = `${champion.id}|${position}|${tier}|${buildsSource}`;
   const portrait = icons.championPortraitUrl(champion.id);
   const laneSvg = position ? icons.positionSvg(position.toLowerCase()) : "";
 
@@ -115,7 +118,7 @@ export async function render(container, { champion, position, isBrowse, hasChamp
   lastFetchKey = fetchKey;
 
   const [runesR, countersR] = await Promise.allSettled([
-    meta.fetchChampionBundle({ championId: champion.id, position, tier, source })
+    meta.fetchChampionBundle({ championId: champion.id, position, tier })
       .then((b) => ({ ...b, championId: champion.id, championName: champion.name, position })),
     meta.fetchCounters({ championId: champion.id, position, tier }),
   ]);

@@ -8,6 +8,7 @@ import * as meta from "../../../lib/meta.js";
 import * as updater from "../../../lib/updater.js";
 import * as selfUpdate from "../../../lib/self-update.js";
 import * as postGame from "../../post-game-opgg.js";
+import { BUILDS_PROVIDERS, META_PROVIDERS } from "../../../lib/providers/index.js";
 
 const FIELDS = [
   { key: "autoAccept",      label: "Auto-accept queue" },
@@ -21,7 +22,22 @@ const FIELDS = [
   { key: "performanceMode", label: "Performance mode" },
 ];
 
+// Provider dropdowns are derived from the provider registries so adding a
+// new provider only requires dropping a file under lib/providers/.
+const buildsProviderOptions = Object.values(BUILDS_PROVIDERS).map((p) => [p.id, p.label]);
+const metaProviderOptions   = Object.values(META_PROVIDERS).map((p) => [p.id, p.label]);
+
 const SELECTS = [
+  {
+    key: "buildsSource", label: "Builds source",
+    options: buildsProviderOptions,
+    detail: "Drives the Champion tab (runes, items, spells, skill order) and auto-apply during champ select.",
+  },
+  {
+    key: "metaSource", label: "Meta source",
+    options: metaProviderOptions,
+    detail: "Drives the Meta tab (tier list, counters).",
+  },
   {
     key: "autoApplyRunePage", label: "Auto-apply page",
     options: [
@@ -77,11 +93,8 @@ export function render(container, onChange) {
             ).join("")}
           </select>
         </label>
+        ${sel.detail ? `<div class="ll-action-detail" style="margin-top:-4px;margin-bottom:8px;">${sel.detail}</div>` : ""}
       `).join("")}
-      <div class="ll-source-row">
-        <span>Source</span>
-        <span class="ll-source-value">Lolalytics → U.GG <span class="ll-source-detail">(auto-fallback)</span></span>
-      </div>
       <hr/>
       <div class="ll-settings-actions">
         <button class="ll-action-btn" data-action="match-history">Open match history</button>
